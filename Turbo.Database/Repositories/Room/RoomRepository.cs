@@ -20,7 +20,14 @@ public class RoomRepository(IEmulatorContext context) : IRoomRepository
             UsersMax = maxUsers,
             NavigatorCategoryEntityId = categoryId,
             RoomModelEntityId = modelId,
-            TradeType = tradeSetting
+            TradeType = tradeSetting,
+            HideWalls = false,
+            AllowWalkThrough = true,
+            AllowEditing = false,
+            AllowPets = false,
+            AllowPetsEat = false,
+
+
         };
 
         context.Add(entity);
