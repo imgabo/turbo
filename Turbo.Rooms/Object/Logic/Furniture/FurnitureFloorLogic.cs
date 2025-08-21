@@ -5,6 +5,7 @@ using Turbo.Core.Game.Rooms;
 using Turbo.Core.Game.Rooms.Constants;
 using Turbo.Core.Game.Rooms.Mapping;
 using Turbo.Core.Game.Rooms.Object;
+using Turbo.Core.Game.Rooms.Object.Constants;
 using Turbo.Core.Game.Rooms.Object.Logic;
 using Turbo.Core.Game.Rooms.Utils;
 using Turbo.Events.Game.Rooms.Avatar;
@@ -19,6 +20,9 @@ namespace Turbo.Rooms.Object.Logic.Furniture;
 public class FurnitureFloorLogic : FurnitureLogicBase, IRollingObjectLogic, IFurnitureFloorLogic
 {
     private IRollerData _rollerData;
+    private IRoomObjectAvatar? _occupant;
+    public bool IsOccupied => _occupant is not null;
+    public IRoomObjectAvatar? Occupant => _occupant;
     public IRoomObjectFloor RoomObject { get; private set; }
 
     public bool SetRoomObject(IRoomObjectFloor roomObject)
@@ -108,7 +112,7 @@ public class FurnitureFloorLogic : FurnitureLogicBase, IRollingObjectLogic, IFur
         if (CanSit())
         {
             avatarLogic.Sit(true, StackHeight, RoomObject.Rotation);
-
+            _occupant = avatar;
             return;
         }
 
@@ -154,6 +158,61 @@ public class FurnitureFloorLogic : FurnitureLogicBase, IRollingObjectLogic, IFur
     public virtual bool CanRoll()
     {
         return true;
+    }
+
+    private bool Unseat()
+    {
+
+        if (_occupant is null) return false;
+
+        var prev = _occupant;
+
+        if (_occupant.Logic is AvatarLogic avatarLogic)
+        {
+
+            avatarLogic.Sit(false, StackHeight, RoomObject.Rotation);
+            _occupant.Z = RoomObject.Z;
+            _occupant.NeedsUpdate = true;
+        }
+
+        _occupant = null;
+        return true;
+    }
+
+    public override void OnMove(IRoomManipulator roomManipulator)
+    {
+        if (_occupant is not null && !_occupant.Location.Compare(RoomObject.Location)) Unseat();
+
+        if (CanSit() || CanLay())
+        {
+            var tile = GetCurrentTile();
+            if (tile is not null && tile.Avatars.Count > 0)
+            {
+                foreach (var avatar in tile.Avatars)
+                {
+                    if (avatar.Logic is AvatarLogic avatarLogic)
+                    {
+                        // Check if avatar is sitting or laying on this furniture
+                        if (avatarLogic.HasStatus(RoomObjectAvatarStatus.Sit) && CanSit())
+                        {
+                            // Update sitting avatar's rotation to match furniture rotation
+                            var sitRotation = RoomObject.Location.CalculateSitRotation();
+                            avatar.Rotation = sitRotation;
+                            avatar.HeadRotation = sitRotation;
+                            avatar.NeedsUpdate = true;
+                        }
+                        else if (avatarLogic.HasStatus(RoomObjectAvatarStatus.Lay) && CanLay())
+                        {
+                            // Update laying avatar's rotation to match furniture rotation
+                            var layRotation = RoomObject.Location.CalculateSitRotation();
+                            avatar.Rotation = layRotation;
+                            avatar.HeadRotation = layRotation;
+                            avatar.NeedsUpdate = true;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     public override bool CanToggle(IRoomObjectAvatar avatar)
@@ -204,7 +263,7 @@ public class FurnitureFloorLogic : FurnitureLogicBase, IRollingObjectLogic, IFur
         return tiles;
     }
 
-    public virtual double StackHeight => FurnitureDefinition.Z;
+    public virtual double StackHeight => FurnitureDefinition.Z; // renamed from Z
 
     public double Height => RoomObject.Z + StackHeight;
 
@@ -224,6 +283,8 @@ public class FurnitureFloorLogic : FurnitureLogicBase, IRollingObjectLogic, IFur
     protected override void CleanUp()
     {
         _rollerData = null;
+
+        _occupant = null;
 
         base.CleanUp();
     }
